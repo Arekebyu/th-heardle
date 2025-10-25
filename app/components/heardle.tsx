@@ -1,85 +1,104 @@
-import { useEffect, useState } from "react";
-import { Music } from "../lib/definitions";
-import Soundcloud from "soundcloud.ts";
-import { Readable } from "stream";
+'use client';
 
-export default function heardle({ musics }: { musics: Music[] }) {
-    const [currentMusic, setCurrentMusic] = useState<Music>(musics[Math.floor(Math.random() * musics.length)]);
+import { useEffect, useState } from "react";
+import { MusicInfo } from "../lib/definitions";
+
+export default function Heardle({ musics }: { musics: MusicInfo[] }) {
+    const [currentMusic, setCurrentMusic] = useState(musics[Math.floor(Math.random() * musics.length)]);
     function updateMusic() {
         if (musics.length === 0) {
             return;
         }
-        let newMusic: Music = musics[Math.floor(Math.random() * musics.length)];
+        let newMusic: MusicInfo = musics[Math.floor(Math.random() * musics.length)];
         //used to avoid repetition of music.
         while (newMusic.url === currentMusic.url) {
             newMusic = musics[Math.floor(Math.random() * musics.length)];
         }
         setCurrentMusic(newMusic)
     }
+    return (
+        <>
+            <MusicPlayer music={currentMusic} />
+        </>)
 }
 
-function MusicPlayer({ music }: { music: Music }) {
-    let playingLink: string = "None"
-    const [currentlyPlaying, setCurrentlyPlaying] = useState<HTMLAudioElement | null>(null);
-    const [isPlaying, setIsPlaying] = useState<Boolean>(false);
-    const [audioLoudness, setAudioloudness] = useState(0.0)
-    // should also load music 
+function MusicPlayer({ music }: { music: MusicInfo }) {
+    const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
+    const [playing, setPlaying] = useState(false);
+    const [volume, setVolume] = useState(1.0);
+
     async function loadMusic() {
-        let stream: Readable | null = null
-        switch (music.platform) {
-            case 'soundcloud':
-                const soundcloud = new Soundcloud();
-                const readableStream = await soundcloud.util.streamTrack(music.url);
-                stream = readableStream;
-                break;
-            default:
-                break;
-        }
-        let load = async () => {
-            const chunks = []
-            while (true) {
-                const { done, value } = await stream?.read();
-                if (done) {
-                    break;
-                }
-                chunks.push(value);
+        try {
+            if (currentAudio) {
+                currentAudio.pause();
+                setCurrentAudio(null);
             }
-            const blob = new Blob(chunks)
-            playingLink = URL.createObjectURL(blob);
-            const audio = new Audio();
-            audio.src = playingLink
-            setCurrentlyPlaying(audio);
-        }
-        load()
 
+            if (music.platform === 'soundcloud') {
+                const response = await fetch(`https://api.soundcloud.com/resolve?url=${encodeURIComponent(music.url)}`);
+
+                if (!response.ok) throw new Error('Failed to fetch track info');
+
+                const track = await response.json();
+                const audioUrl = track.stream_url;
+
+                const audio = new Audio(audioUrl);
+                audio.volume = volume;
+                setCurrentAudio(audio);
+            }
+        } catch (error) {
+            console.error('Error loading music:', error);
+        }
     }
-    // when music is changed, load music again.
-    useEffect(() => {
-        setIsPlaying(false)
-        if (playingLink !== "none") {
-            currentlyPlaying?.pause()
-            URL.revokeObjectURL(playingLink)
-        }
-        loadMusic()
-    }, [music])
-    // play and pause.
-    useEffect(() => {
-        if (isPlaying) {
-            currentlyPlaying?.play();
-        } else {
-            currentlyPlaying?.pause();
-        }
-    }, [isPlaying])
-    // should have functionality to adjust volume
-    useEffect(() => {
-        if (currentlyPlaying) {
-            currentlyPlaying.volume = audioLoudness
-        }
-    }, [audioLoudness])
 
+    // Load music when the track changes
+    useEffect(() => {
+        loadMusic();
+        return () => {
+            if (currentAudio) {
+                currentAudio.pause();
+            }
+        };
+    }, [music.url]);
+
+    // Handle play/pause
+    useEffect(() => {
+        if (currentAudio) {
+            if (playing) {
+                currentAudio.play();
+            } else {
+                currentAudio.pause();
+            }
+        }
+    }, [playing, currentAudio]);
+
+    // Handle volume changes
+    useEffect(() => {
+        if (currentAudio) {
+            currentAudio.volume = volume;
+        }
+    }, [volume, currentAudio]);
+
+    return (
+        <div className="music-player">
+            <div className="controls">
+                <button onClick={() => setPlaying(!playing)}>
+                    {playing ? 'Pause' : 'Play'}
+                </button>
+                <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={volume}
+                    onChange={(e) => setVolume(parseFloat(e.target.value))}
+                />
+            </div>
+        </div>
+    );
 }
 
-function Guesser({ musics, updateGuess }: { musics: Music[], guess: string, updateGuess: (guess: string) => void }) {
+function Guesser({ musics, updateGuess }: { musics: MusicInfo[], guess: string, updateGuess: (guess: string) => void }) {
     // search box with possible candidates
     // when guess is made, modifies guess with updateGuess
 }
