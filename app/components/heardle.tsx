@@ -3,49 +3,49 @@
 import { useEffect, useState } from "react";
 import { MusicInfo } from "../lib/definitions";
 
-export default function Heardle({ musics }: { musics: MusicInfo[] }) {
-    const [currentMusic, setCurrentMusic] = useState(musics[Math.floor(Math.random() * musics.length)]);
+export default function Heardle({ musics }: { musics: Map<string, MusicInfo> }) {
+    let musicList: string[] = [];
+    const [currentMusic, setCurrentMusic] = useState((musicList[Math.floor(Math.random() * musicList.length)]));
     function updateMusic() {
-        if (musics.length === 0) {
+        if (musics.size <= 1) {
             return;
         }
-        let newMusic: MusicInfo = musics[Math.floor(Math.random() * musics.length)];
-        //used to avoid repetition of music.
-        while (newMusic.url === currentMusic.url) {
-            newMusic = musics[Math.floor(Math.random() * musics.length)];
+        let newMusic: string = musicList[Math.floor(Math.random() * musicList.length)];
+        //used to avoid repetition of music, will not loop endlessly due to condition from above.
+        while (newMusic === currentMusic) {
+            newMusic = musicList[Math.floor(Math.random() * musicList.length)];
         }
         setCurrentMusic(newMusic)
     }
+    useEffect(() => {
+        musicList = musics.keys().toArray();
+        updateMusic()
+    }, [musics])
     return (
         <>
-            <MusicPlayer music={currentMusic} />
+            <MusicPlayer music={musics.get(currentMusic)} />
         </>)
 }
 
-function MusicPlayer({ music }: { music: MusicInfo }) {
+// will be defined unless musics is size 0.
+function MusicPlayer({ music }: { music: MusicInfo | undefined }) {
     const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
     const [playing, setPlaying] = useState(false);
     const [volume, setVolume] = useState(1.0);
 
     async function loadMusic() {
+        if (!music) {
+            console.log("Musicplayer got undefined music")
+            return
+        }
         try {
             if (currentAudio) {
                 currentAudio.pause();
                 setCurrentAudio(null);
             }
-
-            if (music.platform === 'soundcloud') {
-                const response = await fetch(`https://api.soundcloud.com/resolve?url=${encodeURIComponent(music.url)}`);
-
-                if (!response.ok) throw new Error('Failed to fetch track info');
-
-                const track = await response.json();
-                const audioUrl = track.stream_url;
-
-                const audio = new Audio(audioUrl);
-                audio.volume = volume;
-                setCurrentAudio(audio);
-            }
+            const audio = new Audio(music.url);
+            audio.volume = volume;
+            setCurrentAudio(audio);
         } catch (error) {
             console.error('Error loading music:', error);
         }
@@ -59,7 +59,7 @@ function MusicPlayer({ music }: { music: MusicInfo }) {
                 currentAudio.pause();
             }
         };
-    }, [music.url]);
+    }, [music]);
 
     // Handle play/pause
     useEffect(() => {
@@ -98,7 +98,7 @@ function MusicPlayer({ music }: { music: MusicInfo }) {
     );
 }
 
-function Guesser({ musics, updateGuess }: { musics: MusicInfo[], guess: string, updateGuess: (guess: string) => void }) {
+function Guesser({ musics, updateGuess }: { musics: Map<string, MusicInfo>, guess: string, updateGuess: (guess: string) => void }) {
     // search box with possible candidates
     // when guess is made, modifies guess with updateGuess
 }
