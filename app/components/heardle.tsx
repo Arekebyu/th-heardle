@@ -1,29 +1,68 @@
 'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { MusicInfo } from "../lib/definitions";
+import Fuse from 'fuse.js';
+import { prepareFlightRouterStateForRequest } from "next/dist/client/flight-data-helpers";
+
+type GameState = {
+    guesses: number;
+    correct: boolean;
+    music: string;
+}
+type GameStateCommand =
+    "incrementGuesses" |
+    "correct" |
+    "reset"
 
 export default function Heardle({ musics }: { musics: Map<string, MusicInfo> }) {
     let musicList: string[] = [];
-    const [currentMusic, setCurrentMusic] = useState((musicList[Math.floor(Math.random() * musicList.length)]));
-    function updateMusic() {
+    function changeGameState(state: GameState, action: GameStateCommand): GameState {
+        if (action === "incrementGuesses") {
+            return {
+                ...state,
+                guesses: state.guesses + 1,
+            }
+        } else if (action === "correct") {
+            return {
+                ...state,
+                correct: true,
+            }
+        } else if (action === "reset") {
+            return {
+                guesses: 0,
+                correct: false,
+                music: generateNewMusic()
+            }
+        }
+        return state;
+    }
+    const [state, dispatchGameState] = useReducer(changeGameState,
+        {
+            guesses: 0,
+            correct: false,
+            music: (musicList[Math.floor(Math.random() * musicList.length)])
+        }
+    )
+    function generateNewMusic() {
         if (musics.size <= 1) {
-            return;
+            return musicList[0];
         }
         let newMusic: string = musicList[Math.floor(Math.random() * musicList.length)];
         //used to avoid repetition of music, will not loop endlessly due to condition from above.
-        while (newMusic === currentMusic) {
+        while (newMusic === state.music) {
             newMusic = musicList[Math.floor(Math.random() * musicList.length)];
         }
-        setCurrentMusic(newMusic)
+        return newMusic;
     }
     useEffect(() => {
         musicList = musics.keys().toArray();
-        updateMusic()
+        dispatchGameState('reset')
     }, [musics])
     return (
         <>
-            <MusicPlayer music={musics.get(currentMusic)} />
+            <MusicPlayer music={musics.get(state.music)} />
+            <Guesser musics={musicList} state={state} dispatch={dispatchGameState}></Guesser>
         </>)
 }
 
@@ -98,7 +137,39 @@ function MusicPlayer({ music }: { music: MusicInfo | undefined }) {
     );
 }
 
-function Guesser({ musics, updateGuess }: { musics: Map<string, MusicInfo>, guess: string, updateGuess: (guess: string) => void }) {
+function Guesser({ musics, state, dispatch }: { musics: string[], state: GameState, dispatch: (command: GameStateCommand) => void }) {
     // search box with possible candidates
+    let [similar, setSimilar] = useState<string[]>([])
+    let [guess, setGuess] = useState("");
     // when guess is made, modifies guess with updateGuess
+    useEffect(() => {
+        const fuse = new Fuse(musics)
+        setSimilar(fuse.search(guess).map((x) => x.item))
+    }, [guess])
+
+    function checkGuess(guess: string) {
+        if (guess == state.music) {
+            dispatch("correct");
+        } else {
+            dispatch("incrementGuesses");
+        }
+    }
+    return (
+        <div id={"guesser"}>
+            <input value={guess}
+                onKeyDown={(e) => {
+                    if (e.key.length === 1) {
+                        setGuess(guess + e.key)
+                    }
+                }}></input>
+            <button onClick={() => {
+                if (similar.includes(guess)) {
+                    checkGuess(guess)
+                }
+            }}>
+                submit
+            </button>
+        </div>
+    )
+
 }
