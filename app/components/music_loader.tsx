@@ -64,14 +64,11 @@ export default function MusicLoader({ musics, setMusics }: { musics: Map<string,
                 setAlias('');
                 setError({ type: 'info', message: 'Track added successfully!' });
             } else {
-                // For playlists, we'll need to implement the playlist fetching logic
-                throw new Error('Playlist support coming soon!');
-
                 setUrl('');
                 setAlias('');
                 setError({
                     type: 'info',
-                    message: 'Playlist support coming soon!'
+                    message: 'playlist wip'
                 });
             }
         } catch (err) {
