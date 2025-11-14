@@ -8,7 +8,7 @@ import { prepareFlightRouterStateForRequest } from "next/dist/client/flight-data
 type GameState = {
     guesses: number;
     correct: boolean;
-    music: string;
+    music: MusicInfo | undefined;
 }
 type GameStateCommand =
     "incrementGuesses" |
@@ -41,17 +41,17 @@ export default function Heardle({ musics }: { musics: Map<string, MusicInfo> }) 
         {
             guesses: 0,
             correct: false,
-            music: (musicList[Math.floor(Math.random() * musicList.length)])
+            music: musics.get((musicList[Math.floor(Math.random() * musicList.length)]))
         }
     )
     function generateNewMusic() {
         if (musics.size <= 1) {
-            return musicList[0];
+            return musics.get(musicList[0]);
         }
-        let newMusic: string = musicList[Math.floor(Math.random() * musicList.length)];
+        let newMusic: MusicInfo | undefined = musics.get(musicList[Math.floor(Math.random() * musicList.length)]);
         //used to avoid repetition of music, will not loop endlessly due to condition from above.
-        while (newMusic === state.music) {
-            newMusic = musicList[Math.floor(Math.random() * musicList.length)];
+        while (newMusic?.name === state.music?.name) {
+            newMusic = musics.get(musicList[Math.floor(Math.random() * musicList.length)]);
         }
         return newMusic;
     }
@@ -61,13 +61,14 @@ export default function Heardle({ musics }: { musics: Map<string, MusicInfo> }) 
     }, [musics])
     return (
         <>
-            <MusicPlayer music={musics.get(state.music)} />
+            <MusicPlayer state={state} />
             <Guesser musics={musicList} state={state} dispatch={dispatchGameState}></Guesser>
         </>)
 }
 
 // will be defined unless musics is size 0.
-function MusicPlayer({ music }: { music: MusicInfo | undefined }) {
+function MusicPlayer({ state }: { state: GameState }) {
+    const music = state.music
     const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
     const [playing, setPlaying] = useState(false);
     const [volume, setVolume] = useState(1.0);
@@ -89,24 +90,30 @@ function MusicPlayer({ music }: { music: MusicInfo | undefined }) {
             console.error('Error loading music:', error);
         }
     }
+    function pauseAudio() {
+        if (currentAudio) {
+            currentAudio.pause();
+        }
+        window.clearTimeout(timeout)
+
+    }
 
     // Load music when the track changes
     useEffect(() => {
         loadMusic();
         return () => {
-            if (currentAudio) {
-                currentAudio.pause();
-            }
+            pauseAudio()
         };
     }, [music]);
-
+    let timeout = window.setTimeout(() => { }, 0);
     // Handle play/pause
     useEffect(() => {
         if (currentAudio) {
             if (playing) {
                 currentAudio.play();
+                timeout = window.setTimeout(() => { currentAudio.pause() }, 5000 * (state.guesses + 1))
             } else {
-                currentAudio.pause();
+                pauseAudio();
             }
         }
     }, [playing, currentAudio]);
@@ -148,7 +155,7 @@ function Guesser({ musics, state, dispatch }: { musics: string[], state: GameSta
     }, [guess])
 
     function checkGuess(guess: string) {
-        if (guess == state.music) {
+        if (guess == state.music?.name) {
             dispatch("correct");
         } else {
             dispatch("incrementGuesses");
@@ -156,20 +163,29 @@ function Guesser({ musics, state, dispatch }: { musics: string[], state: GameSta
     }
     return (
         <div id={"guesser"}>
+            <ul className={"guessSelector"}>
+                {similar.map((music) =>
+                    <li onClick={() => {
+                        setGuess(music)
+                    }}>{music}</li>
+                )}
+            </ul>
             <input value={guess}
-                onKeyDown={(e) => {
-                    if (e.key.length === 1) {
-                        setGuess(guess + e.key)
-                    }
+                onChange={(e) => {
+                    setGuess(e.target.value)
                 }}></input>
             <button onClick={() => {
-                if (similar.includes(guess)) {
+                if (guess !== "") {
                     checkGuess(guess)
                 }
             }}>
                 submit
             </button>
+            <button onClick={() => {
+                checkGuess(guess)
+            }}>
+                skip
+            </button>
         </div>
     )
-
 }
